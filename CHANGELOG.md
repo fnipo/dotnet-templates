@@ -9,6 +9,9 @@ The `Unreleased` section name is replaced by the expected version of next releas
 ## [Unreleased]
 
 ### Added
+
+- `equinox-fc`: Fulfilment-Center inspired example with basic `Equinox.MemoryStore` and `Equinox.Cosmos` tests
+
 ### Changed
 ### Removed
 ### Fixed
