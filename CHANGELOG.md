@@ -10,7 +10,7 @@ The `Unreleased` section name is replaced by the expected version of next releas
 
 ### Added
 
-- `equinox-fc`: Fulfilment-Center inspired example with basic `Equinox.MemoryStore` and `Equinox.Cosmos` tests
+- `equinox-fc`: Fulfilment-Center inspired example with basic `Equinox.MemoryStore` and `Equinox.Cosmos` tests [#40](https://github.com/jet/dotnet-templates/pull/40)
 
 ### Changed
 ### Removed
