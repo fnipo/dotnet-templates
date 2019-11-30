@@ -11,9 +11,15 @@
         <Compile Include="LocationSeries.fs" />
         <Compile Include="LocationEpoch.fs" />
         <Compile Include="Location.fs" />
+        <Compile Include="Ticket.fs" />
+        <Compile Include="TicketList.fs" />
+        <Compile Include="Allocator.fs" />
+        <Compile Include="Allocation.fs" />
+        <Compile Include="ListAllocation.fs" />
     </ItemGroup>
     <ItemGroup>
         <PackageReference Include="Equinox.Cosmos" Version="2.0.0-rc8" />
+        <PackageReference Include="Equinox.EventStore" Version="2.0.0-rc8" />
         <PackageReference Include="FSharp.UMX" Version="1.0.0" />
     </ItemGroup>
 
