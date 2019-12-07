@@ -229,7 +229,7 @@ let create resolve = Service(Serilog.Log.ForContext<Service>(), resolve, maxAtte
 module EventStore =
 
     open Equinox.EventStore
-    let resolve (context, cache) =
+    let private resolve (context, cache) =
         let cacheStrategy = CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
         // while there are competing writers [which might cause us to have to retry a Transact], this should be infrequent
         let opt = Equinox.ResolveOption.AllowStale
@@ -241,7 +241,7 @@ module EventStore =
 module Cosmos =
 
     open Equinox.Cosmos
-    let resolve (context, cache) =
+    let private resolve (context, cache) =
         let cacheStrategy = CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
         // while there are competing writers [which might cause us to have to retry a Transact], this should be infrequent
         let opt = Equinox.ResolveOption.AllowStale

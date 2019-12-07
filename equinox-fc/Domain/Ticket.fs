@@ -63,7 +63,7 @@ let create resolve = Service(Serilog.Log.ForContext<Service>(), resolve, 3)
 module EventStore =
 
     open Equinox.EventStore
-    let resolve (context, cache) =
+    let private resolve (context, cache) =
         let cacheStrategy = CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
         // because we only ever need the last event, we use the Equinox.EventStore access strategy that optimizes around that
         Resolver(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy, AccessStrategy.LatestKnownEvent).Resolve
@@ -73,7 +73,7 @@ module EventStore =
 module Cosmos =
 
     open Equinox.Cosmos
-    let resolve (context, cache) =
+    let private resolve (context, cache) =
         let cacheStrategy = CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
         // because we only ever need the last event to build the state, we feed the events we are writing
         // (there's always exactly one if we are writing), into the unfolds slot so a single point read with etag check gets us state in one trip
