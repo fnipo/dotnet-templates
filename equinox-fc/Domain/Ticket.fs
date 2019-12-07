@@ -13,6 +13,7 @@ module Events =
         interface TypeShape.UnionContract.IUnionContract
     let codec = FsCodec.NewtonsoftJson.Codec.Create<Event>()
     let [<Literal>] categoryId = "Ticket"
+    let (|AggregateId|) id = Equinox.AggregateId(categoryId, TicketId.toString id)
 
 module Folds =
 
@@ -50,8 +51,7 @@ let decide (allocator : AllocatorId) (command : Command) (state : Folds.State) :
 type Service internal (resolve, ?maxAttempts) =
 
     let log = Serilog.Log.ForContext<Service>()
-    let (|AggregateId|) id = Equinox.AggregateId(Events.categoryId, TicketId.toString id)
-    let (|Stream|) (AggregateId id) = Equinox.Stream<Events.Event,Folds.State>(log, resolve id, maxAttempts = defaultArg maxAttempts 3)
+    let (|Stream|) (Events.AggregateId id) = Equinox.Stream<Events.Event,Folds.State>(log, resolve id, maxAttempts = defaultArg maxAttempts 3)
 
     /// Attempts to achieve the intent represented by `command`. High level semantics as per comments on Command (see decide for lowdown)
     /// `false` is returned if a competing allocator holds it (or we're attempting to jump straight to Allocated without first Reserving)

@@ -16,6 +16,7 @@ module Events =
         interface TypeShape.UnionContract.IUnionContract
     let codec = FsCodec.NewtonsoftJson.Codec.Create<Event>()
     let [<Literal>] categoryId = "Allocator"
+    let (|AggregateId|) id = Equinox.AggregateId(categoryId, AllocatorId.toString id)
 
 module Folds =
 
@@ -40,8 +41,7 @@ let decideComplete allocationId reason : Folds.State -> Events.Event list = func
 type Service internal (resolve, ?maxAttempts) =
 
     let log = Serilog.Log.ForContext<Service>()
-    let (|AggregateId|) id = Equinox.AggregateId(Events.categoryId, AllocatorId.toString id)
-    let (|Stream|) (AggregateId id) = Equinox.Stream<Events.Event,Folds.State>(log, resolve id, maxAttempts = defaultArg maxAttempts 3)
+    let (|Stream|) (Events.AggregateId id) = Equinox.Stream<Events.Event,Folds.State>(log, resolve id, maxAttempts = defaultArg maxAttempts 3)
 
     member __.Commence(allocatorId, allocationId, cutoff) : Async<CommenceResult> =
         let (Stream stream) = allocatorId
