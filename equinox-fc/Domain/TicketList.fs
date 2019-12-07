@@ -11,7 +11,7 @@ module Events =
         interface TypeShape.UnionContract.IUnionContract
     let codec = FsCodec.NewtonsoftJson.Codec.Create<Event>()
     let [<Literal>] categoryId = "TicketList"
-    let (|AggregateId|) id = Equinox.AggregateId(categoryId, TicketListId.toString id)
+    let (|For|) id = Equinox.AggregateId(categoryId, TicketListId.toString id)
 
 module Fold =
 
@@ -31,7 +31,7 @@ let interpret (allocatorId : AllocatorId, allocated : TicketId list) (state : Fo
 
 type Service internal (log, resolve, maxAttempts) =
 
-    let resolve (Events.AggregateId id) = Equinox.Stream<Events.Event, Fold.State>(log, resolve id, maxAttempts)
+    let resolve (Events.For id) = Equinox.Stream<Events.Event, Fold.State>(log, resolve id, maxAttempts)
 
     member __.Sync(pickListId, allocatorId, assignedTickets) : Async<unit> =
         let stream = resolve pickListId

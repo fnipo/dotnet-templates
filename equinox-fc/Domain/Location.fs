@@ -10,7 +10,7 @@ type LocationService internal (zeroBalance, shouldClose, series : Series.Service
 
     let rec execute locationId originEpochId =
         let rec aux epochId balanceToCarryForward wip = async {
-            let decide state = match wip with Complete r -> r,[] | Pending decide -> decide state
+            let decide state = match wip with Complete r -> r, [] | Pending decide -> decide state
             match! epochs.Sync(locationId, epochId, balanceToCarryForward, decide, shouldClose) with
             | { balance = bal; result = Some res; isOpen = true } ->
                 if originEpochId <> epochId then
@@ -40,7 +40,7 @@ module Helpers =
 
 module Cosmos =
 
-    let createService (zeroBalance, shouldClose) (context, cache, maxAttempts) =
-        let series = Series.Cosmos.createService (context, cache, maxAttempts)
-        let epochs = Epoch.Cosmos.createService (context, cache, maxAttempts)
+    let create (zeroBalance, shouldClose) (context, cache, maxAttempts) =
+        let series = Series.Cosmos.create (context, cache, maxAttempts)
+        let epochs = Epoch.Cosmos.create (context, cache, maxAttempts)
         create (zeroBalance, shouldClose) (series, epochs)

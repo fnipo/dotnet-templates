@@ -57,7 +57,7 @@ let sync (balanceCarriedForward : Fold.Balance option) (decide : (Fold.Balance -
         acc.Ingest state <|
             match state with
             | Fold.Initial -> failwith "We've just guaranteed not Initial"
-            | Fold.Open { value = bal } -> let r,es = decide bal in Some r,es
+            | Fold.Open { value = bal } -> let r, es = decide bal in Some r, es
             | Fold.Closed _ -> None, []
     // Finally (iff we're `Open`, have run a `decide` and `shouldClose`), we generate a Closed event
     let (balance, isOpen), _ =
@@ -82,8 +82,8 @@ let create resolve maxAttempts = Service(Serilog.Log.ForContext<Service>(), reso
 module Cosmos =
 
     open Equinox.Cosmos
-    let resolve (context,cache) =
+    let resolve (context, cache) =
         let cacheStrategy = CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
         Resolver(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy, AccessStrategy.Unoptimized).Resolve
-    let createService (context,cache,maxAttempts) =
-        create (resolve (context,cache)) maxAttempts
+    let create (context, cache, maxAttempts) =
+        create (resolve (context, cache)) maxAttempts

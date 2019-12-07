@@ -32,7 +32,7 @@ module Events =
         interface TypeShape.UnionContract.IUnionContract
     let codec = FsCodec.NewtonsoftJson.Codec.Create<Event>()
     let [<Literal>] categoryId = "Allocation"
-    let (|AggregateId|) id = Equinox.AggregateId(categoryId, AllocationId.toString id)
+    let (|For|) id = Equinox.AggregateId(categoryId, AllocationId.toString id)
 
 module Fold =
 
@@ -216,9 +216,9 @@ let sync (updates : Update seq, command : Command) (state : Fold.State) : (bool*
     (* Yield outstanding processing requirements (if any), together with events accumulated based on the `updates` *)
     (accepted, ProcessState.FromFoldState state), acc.Accumulated
 
-type Service internal (log, resolve, ?maxAttempts) =
+type Service internal (log, resolve, maxAttempts) =
 
-    let resolve (Events.AggregateId id) = Equinox.Stream<Events.Event, Fold.State>(log, resolve id, maxAttempts = defaultArg maxAttempts 3)
+    let resolve (Events.For id) = Equinox.Stream<Events.Event, Fold.State>(log, resolve id, maxAttempts)
 
     member __.Sync(allocationId, updates, command) : Async<bool*ProcessState> =
         let stream = resolve allocationId

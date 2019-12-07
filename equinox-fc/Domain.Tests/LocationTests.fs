@@ -21,7 +21,7 @@ module Location =
 
             let resolve store = Resolver(store, Epoch.Events.codec, Epoch.Fold.fold, Epoch.Fold.initial).Resolve
 
-        let createService (zeroBalance, shouldClose) store =
+        let create (zeroBalance, shouldClose) store =
             let maxAttempts = Int32.MaxValue
             let series = Series.create (Series.resolve store) maxAttempts
             let epochs = Epoch.create (Epoch.resolve store) maxAttempts
@@ -39,12 +39,12 @@ let run (service : LocationService) (IdsAtLeastOne locations, deltas : _[]) = As
         let value = max -bal delta
         if value = 0 then 0, []
         else value, [Location.Epoch.Events.Delta { value = value }]
-    let! appliedDeltas = seq { for loc,x in updates -> async { let! _,eff = service.Execute(loc, adjust x) in return loc,eff } } |> Async.Parallel
-    let expectedBalances = Seq.append (seq { for l in locations -> l, 0}) appliedDeltas |> Seq.groupBy fst |> Seq.map (fun (l,xs) -> l, xs |> Seq.sumBy snd) |> Set.ofSeq
+    let! appliedDeltas = seq { for loc, x in updates -> async { let! _, eff = service.Execute(loc, adjust x) in return loc, eff } } |> Async.Parallel
+    let expectedBalances = Seq.append (seq { for l in locations -> l, 0}) appliedDeltas |> Seq.groupBy fst |> Seq.map (fun (l, xs) -> l, xs |> Seq.sumBy snd) |> Set.ofSeq
 
     (* Verify loading yields identical state *)
 
-    let! balances = seq { for loc in locations -> async { let! bal,() = service.Execute(loc,(fun _ -> (),[])) in return loc,bal } } |> Async.Parallel
+    let! balances = seq { for loc in locations -> async { let! bal, () = service.Execute(loc, (fun _ -> (), [])) in return loc, bal } } |> Async.Parallel
     test <@ expectedBalances = Set.ofSeq balances @> }
 
 let [<Property>] ``MemoryStore properties`` maxEvents args =
@@ -52,12 +52,12 @@ let [<Property>] ``MemoryStore properties`` maxEvents args =
     let zeroBalance = 0
     let maxEvents = max 1 maxEvents
     let shouldClose (state : Epoch.Fold.OpenState) = state.count > maxEvents
-    let service = Location.MemoryStore.createService (zeroBalance, shouldClose) store
+    let service = Location.MemoryStore.create (zeroBalance, shouldClose) store
     run service args
 
 type Cosmos(testOutput) =
 
-    let context,cache = Cosmos.connect ()
+    let context, cache = Cosmos.connect ()
 
     let log = testOutput |> TestOutputAdapter |> createLogger
     do Serilog.Log.Logger <- log
@@ -66,5 +66,5 @@ type Cosmos(testOutput) =
         let zeroBalance = 0
         let maxEvents = max 1 maxEvents
         let shouldClose (state : Epoch.Fold.OpenState) = state.count > maxEvents
-        let service = Location.Cosmos.createService (zeroBalance, shouldClose) (context,cache,Int32.MaxValue)
+        let service = Location.Cosmos.create (zeroBalance, shouldClose) (context, cache, Int32.MaxValue)
         run service args
