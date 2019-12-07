@@ -15,10 +15,10 @@ module Events =
         | Completed     of Completed
         interface TypeShape.UnionContract.IUnionContract
     let codec = FsCodec.NewtonsoftJson.Codec.Create<Event>()
-    let [<Literal>] categoryId = "Allocator"
-    let (|AggregateId|) id = Equinox.AggregateId(categoryId, AllocatorId.toString id)
+    let [<Literal>] category = "Allocator"
+    let (|For|) id = Equinox.AggregateId(category, AllocatorId.toString id)
 
-module Folds =
+module Fold =
 
     type State = Events.Commenced option
     let initial = None
@@ -29,46 +29,47 @@ module Folds =
 
 type CommenceResult = Accepted | Conflict of AllocationId
 
-let decideCommence allocationId cutoff : Folds.State -> CommenceResult*Events.Event list = function
+let decideCommence allocationId cutoff : Fold.State -> CommenceResult*Events.Event list = function
     | None -> Accepted, [Events.Commenced { allocationId = allocationId; cutoff = cutoff }]
     | Some { allocationId = tid } when allocationId = tid -> Accepted, [] // Accept replay idempotently
     | Some curr -> Conflict curr.allocationId, [] // Reject attempts at commencing overlapping transactions
 
-let decideComplete allocationId reason : Folds.State -> Events.Event list = function
+let decideComplete allocationId reason : Fold.State -> Events.Event list = function
     | Some { allocationId = tid } when allocationId = tid -> [Events.Completed { allocationId = allocationId; reason = reason }]
     | Some _ | None -> [] // Assume replay; accept but don't write
 
-type Service internal (resolve, ?maxAttempts) =
+type Service internal (log, resolve, maxAttempts) =
 
-    let log = Serilog.Log.ForContext<Service>()
-    let (|Stream|) (Events.AggregateId id) = Equinox.Stream<Events.Event,Folds.State>(log, resolve id, maxAttempts = defaultArg maxAttempts 3)
+    let resolve (Events.For id) = Equinox.Stream<Events.Event, Fold.State>(log, resolve id, maxAttempts)
 
     member __.Commence(allocatorId, allocationId, cutoff) : Async<CommenceResult> =
-        let (Stream stream) = allocatorId
+        let stream = resolve allocatorId
         stream.Transact(decideCommence allocationId cutoff)
 
     member __.Complete(allocatorId, allocationId, reason) : Async<unit> =
-        let (Stream stream) = allocatorId
+        let stream = resolve allocatorId
         stream.Transact(decideComplete allocationId reason)
+
+let create resolve = Service(Serilog.Log.ForContext<Service>(), resolve, 3)
 
 module EventStore =
 
     open Equinox.EventStore
-    let resolve (context,cache) =
+    let resolve (context, cache) =
         let cacheStrategy = CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
         // while there are competing writers [which might cause us to have to retry a Transact], this should be infrequent
         let opt = Equinox.ResolveOption.AllowStale
-        fun id -> Resolver(context, Events.codec, Folds.fold, Folds.initial, cacheStrategy, AccessStrategy.LatestKnownEvent).Resolve(id,opt)
-    let create (context,cache) =
-        Service(resolve (context,cache))
+        fun id -> Resolver(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy, AccessStrategy.LatestKnownEvent).Resolve(id, opt)
+    let create (context, cache) =
+        create (resolve (context, cache))
 
 module Cosmos =
 
     open Equinox.Cosmos
-    let resolve (context,cache) =
+    let resolve (context, cache) =
         let cacheStrategy = CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
         // while there are competing writers [which might cause us to have to retry a Transact], this should be infrequent
         let opt = Equinox.ResolveOption.AllowStale
-        fun id -> Resolver(context, Events.codec, Folds.fold, Folds.initial, cacheStrategy, AccessStrategy.LatestKnownEvent).Resolve(id,opt)
-    let create (context,cache) =
-        Service(resolve (context,cache))
+        fun id -> Resolver(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy, AccessStrategy.LatestKnownEvent).Resolve(id, opt)
+    let create (context, cache) =
+        create (resolve (context, cache))

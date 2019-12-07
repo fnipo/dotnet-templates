@@ -12,10 +12,10 @@ module Events =
         | Revoked
         interface TypeShape.UnionContract.IUnionContract
     let codec = FsCodec.NewtonsoftJson.Codec.Create<Event>()
-    let [<Literal>] categoryId = "Ticket"
-    let (|AggregateId|) id = Equinox.AggregateId(categoryId, TicketId.toString id)
+    let [<Literal>] category = "Ticket"
+    let (|For|) id = Equinox.AggregateId(category, TicketId.toString id)
 
-module Folds =
+module Fold =
 
     type State = Unallocated | Reserved of by : AllocatorId | Allocated of by : AllocatorId * on : TicketListId
     let initial = Unallocated
@@ -36,46 +36,47 @@ type Command =
     /// (but are not failures from an Allocator's perspective)
     | Revoke
 
-let decide (allocator : AllocatorId) (command : Command) (state : Folds.State) : bool * Events.Event list =
+let decide (allocator : AllocatorId) (command : Command) (state : Fold.State) : bool * Events.Event list =
     match command, state with
-    | Reserve, Folds.Unallocated -> true,[Events.Reserved { allocatorId = allocator }] // normal case -> allow+record
-    | Reserve, Folds.Reserved by when by = allocator -> true,[] // idempotently permit
-    | Reserve, (Folds.Reserved _ | Folds.Allocated _) -> false,[] // report failure, nothing to write
-    | Allocate list, Folds.Allocated (by,l) when by = allocator && l = list -> true,[] // idempotent processing
-    | Allocate list, Folds.Reserved by when by = allocator -> true,[Events.Allocated { allocatorId = allocator; listId = list }] // normal
-    | Allocate _, (Folds.Allocated _ | Folds.Unallocated | Folds.Reserved _) -> false,[] // Fail if someone else has reserved or allocated, or we are jumping straight to Allocated without Reserving first
-    | Revoke, Folds.Unallocated -> true,[] // idempotent handling
-    | Revoke, (Folds.Reserved by | Folds.Allocated (by,_)) when by = allocator -> true,[Events.Revoked] // release Reservation or Allocation
-    | Revoke, (Folds.Reserved _ | Folds.Allocated _ ) -> true,[] // NOTE we report success of achieving the intent (but, critically, we leave it to the actual owner to manage any actual revoke)
+    | Reserve, Fold.Unallocated -> true, [Events.Reserved { allocatorId = allocator }] // normal case -> allow+record
+    | Reserve, Fold.Reserved by when by = allocator -> true, [] // idempotently permit
+    | Reserve, (Fold.Reserved _ | Fold.Allocated _) -> false, [] // report failure, nothing to write
+    | Allocate list, Fold.Allocated (by, l) when by = allocator && l = list -> true, [] // idempotent processing
+    | Allocate list, Fold.Reserved by when by = allocator -> true, [Events.Allocated { allocatorId = allocator; listId = list }] // normal
+    | Allocate _, (Fold.Allocated _ | Fold.Unallocated | Fold.Reserved _) -> false, [] // Fail if someone else has reserved or allocated, or we are jumping straight to Allocated without Reserving first
+    | Revoke, Fold.Unallocated -> true, [] // idempotent handling
+    | Revoke, (Fold.Reserved by | Fold.Allocated (by, _)) when by = allocator -> true, [Events.Revoked] // release Reservation or Allocation
+    | Revoke, (Fold.Reserved _ | Fold.Allocated _ ) -> true, [] // NOTE we report success of achieving the intent (but, critically, we leave it to the actual owner to manage any actual revoke)
 
-type Service internal (resolve, ?maxAttempts) =
+type Service internal (log, resolve, maxAttempts) =
 
-    let log = Serilog.Log.ForContext<Service>()
-    let (|Stream|) (Events.AggregateId id) = Equinox.Stream<Events.Event,Folds.State>(log, resolve id, maxAttempts = defaultArg maxAttempts 3)
+    let resolve (Events.For id) = Equinox.Stream<Events.Event, Fold.State>(log, resolve id, maxAttempts)
 
     /// Attempts to achieve the intent represented by `command`. High level semantics as per comments on Command (see decide for lowdown)
     /// `false` is returned if a competing allocator holds it (or we're attempting to jump straight to Allocated without first Reserving)
     member __.Sync(pickTicketId, allocator, command : Command) : Async<bool> =
-        let (Stream stream) = pickTicketId
+        let stream = resolve pickTicketId
         stream.Transact(decide allocator command)
+
+let create resolve = Service(Serilog.Log.ForContext<Service>(), resolve, 3)
 
 module EventStore =
 
     open Equinox.EventStore
-    let resolve (context,cache) =
+    let resolve (context, cache) =
         let cacheStrategy = CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
         // because we only ever need the last event, we use the Equinox.EventStore access strategy that optimizes around that
-        Resolver(context, Events.codec, Folds.fold, Folds.initial, cacheStrategy, AccessStrategy.LatestKnownEvent).Resolve
-    let create (context,cache)=
-        Service(resolve (context,cache))
+        Resolver(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy, AccessStrategy.LatestKnownEvent).Resolve
+    let create (context, cache) =
+        create (resolve (context, cache))
 
 module Cosmos =
 
     open Equinox.Cosmos
-    let resolve (context,cache) =
+    let resolve (context, cache) =
         let cacheStrategy = CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
         // because we only ever need the last event to build the state, we feed the events we are writing
         // (there's always exactly one if we are writing), into the unfolds slot so a single point read with etag check gets us state in one trip
-        Resolver(context, Events.codec, Folds.fold, Folds.initial, cacheStrategy, AccessStrategy.LatestKnownEvent).Resolve
-    let create (context,cache) =
-        Service(resolve (context,cache))
+        Resolver(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy, AccessStrategy.LatestKnownEvent).Resolve
+    let create (context, cache) =
+        create(resolve (context, cache))
